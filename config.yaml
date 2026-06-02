@@ -1,0 +1,61 @@
+# ============================================================================
+# QA-Benchmark Konfiguration
+# ============================================================================
+# Es werden drei Modell-Rollen unterschieden:
+#   strong      -> generiert Fragen und bewertet Antworten (Judge)
+#   summarizer  -> DAS getestete Modell: erzeugt die Zusammenfassung
+#   answerer    -> beantwortet Fragen; MUSS in beiden Bedingungen identisch sein
+#
+# provider: "ollama" (lokal) oder "anthropic" (Claude-API). Ein Wechsel ist
+# eine einzige Zeile -- der Rest der Pipeline bleibt unberührt.
+# ============================================================================
+
+models:
+  strong:
+    provider: ollama
+    model: qwen3.6:35b-a3b-q4_K_M
+    options:
+      temperature: 0.2
+      num_ctx: 32768
+    # --- Alternative: Claude-API ---
+    # provider: anthropic
+    # model: claude-opus-4-8
+    # api_key_env: ANTHROPIC_API_KEY
+    # options:
+    #   temperature: 0.2
+    #   max_tokens: 2000
+
+  summarizer:
+    provider: ollama
+    model: gemma4:e4b
+    options:
+      temperature: 0.3
+      num_ctx: 32768
+
+  answerer:
+    provider: ollama
+    model: qwen3.6:35b-a3b-q4_K_M
+    options:
+      temperature: 0.0
+      num_ctx: 32768
+
+questions:
+  count: 50
+  # Controls the variety of the generated questions
+  types: [factual, numeric, inferential]
+
+summary:
+  mode: generate        # generate | file
+  target_words: 300     # nur relevant bei mode=generate
+
+answering:
+  closed_book_baseline: true   # jede Frage zusätzlich OHNE Kontext -> Kontaminationscheck
+  require_evidence: true       # Modell muss ein Beleg-Zitat liefern
+  max_context_chars: 90000     # längere Dokumente werden abgeschnitten (Warnung im Report)
+
+judge:
+  # Mögliche Urteile; das stärkere Modell ordnet jede Antwort genau einem zu.
+  scale: [match, partial, mismatch]
+
+run:
+  output_dir: runs

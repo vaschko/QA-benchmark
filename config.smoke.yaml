@@ -1,0 +1,33 @@
+# Schnelle Test-Konfiguration (kleine Modelle, wenige Fragen) für Smoke-Tests.
+models:
+  strong:
+    provider: ollama
+    model: qwen3.5:4b
+    options: { temperature: 0.2 }
+  summarizer:
+    provider: ollama
+    model: qwen3.5:2b
+    options: { temperature: 0.3 }
+  answerer:
+    provider: ollama
+    model: qwen3.5:4b
+    options: { temperature: 0.0 }
+
+questions:
+  count: 3
+  types: [factual, numeric, inferential]
+
+summary:
+  mode: generate
+  target_words: 200
+
+answering:
+  closed_book_baseline: true
+  require_evidence: true
+  max_context_chars: 90000
+
+judge:
+  scale: [match, partial, mismatch]
+
+run:
+  output_dir: runs
