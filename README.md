@@ -152,12 +152,49 @@ In addition, an overview table is printed to the console.
 
 ### Metrics
 
-- **Retention score** – share of questions with a full match
-  (candidate ≈ reference).
-- **Retention score (strict)** – the same, but only over discriminating
-  (non-contaminated) questions.
-- **Coverage** – share of questions the summary could answer at all.
-- **Contamination rate** – share of questions the model solved from prior knowledge.
+Two underlying concepts first:
+
+- **valid** – questions the **original** could answer. Questions the original
+  itself can't answer are dropped (bad questions).
+- **discriminating** – valid questions that the model can **not** solve from
+  prior knowledge. A question is *contaminated* (not discriminating) when the
+  closed-book answer (no document at all) already matched the reference — such a
+  question says nothing about summary quality, the model knew it anyway.
+
+The metrics:
+
+- **Retention score** – of all **valid** questions, the share the summary lets
+  you answer just as well as the original (judge verdict = `match`). The main
+  quality number.
+- **Retention score (discriminating only)** – the same ratio, but computed
+  **only over discriminating questions** (contaminated ones excluded). The
+  cleaner signal, because it ignores questions the model could have answered
+  without any summary.
+- **Coverage** – of all valid questions, the share for which the summary
+  contained *any* answer at all (`found`), regardless of correctness. Coverage
+  means "the summary said something relevant"; retention means "and it was
+  right".
+- **Contamination rate** – share of valid questions solvable from prior
+  knowledge. Low = the benchmark is meaningful.
+
+**Worked example** (from a real report):
+
+```
+Retention score: 22.4 % (11/49 valid questions)
+Retention score (discriminating only): 21.4 %   # 9 of the 42 discriminating
+Coverage: 28.6 %                                 # 14/49 had any answer
+Contamination rate: 14.3 % (42/49 discriminating)  # 7 of 49 contaminated
+```
+
+Here 49 questions were valid; 7 were contaminated, leaving 42 discriminating.
+The summary matched 11/49 questions (22.4 %), but only 9 of those were on
+discriminating questions (9/42 = 21.4 %) — so 2 "hits" were freebies the model
+knew anyway. It contained *some* answer for 14/49 (coverage), of which 11 were
+correct.
+
+> **Rule of thumb:** when the contamination rate is low, both retention scores
+> are nearly equal (as above). When it is high, trust the **discriminating
+> only** score.
 
 ## Project structure
 
