@@ -10,11 +10,10 @@ from rich.console import Console
 from rich.progress import BarColumn, Progress, TextColumn, TimeElapsedColumn
 
 from .config import load_config
-from .pipeline.questions import generate_questions
 from .pipeline.summarize import make_summary
 from .providers import build_provider
 from .report import compute_metrics, print_console, save_run
-from .runner import run_benchmark
+from .runner import load_or_generate_questions, run_benchmark
 
 app = typer.Typer(add_completion=False, help="QA-Benchmark for summaries.")
 console = Console()
@@ -92,8 +91,15 @@ def questions(
     strong: Optional[str] = typer.Option(
         None, "--strong", help="Override the strong model (question generation)."
     ),
+    regenerate_questions: bool = typer.Option(
+        False, "--regenerate-questions", help="Ignore cached questions and regenerate."
+    ),
 ):
-    """Only generate and display questions (for reuse / inspection)."""
+    """Generate (and cache) questions and display them.
+
+    Uses the same cache as `run`, so a subsequent `run` with the same document
+    and --count reuses exactly these questions.
+    """
     from .language import detect_language
     from .loaders import load_document
 
@@ -104,7 +110,9 @@ def questions(
     text = load_document(doc)[: cfg.answering.max_context_chars]
     language = detect_language(text)
     provider = build_provider(cfg.models.strong)
-    qs = generate_questions(text, cfg, provider, language)
+    qs = load_or_generate_questions(
+        text, doc, cfg, provider, regenerate_questions, language
+    )
     console.print(f"[dim]Language: {language}[/dim]")
     for q in qs:
         console.print(f"[bold]{q.id}.[/bold] ({q.type}) {q.text}")

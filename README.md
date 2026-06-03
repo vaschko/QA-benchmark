@@ -1,7 +1,7 @@
 # QA-Benchmark for summaries
 
 Measures **how well a summary preserves the information of the original
-document** – using local Ollama models and/or the Claude API.
+document** – using local Ollama models ~~and/or the Claude API.~~
 
 ## The idea in one sentence
 
@@ -74,7 +74,8 @@ python -m qabench run --doc data/documents/sample_meridian.md --summarizer gemma
 python -m qabench run --doc data/documents/sample_meridian.md \
                       --summary data/summaries/my_summary.md
 
-# Only inspect the questions (they are cached and reused)
+# Generate the questions, cache them and print them (no answering / scoring).
+# A later `run` with the same document + --count reuses exactly these questions.
 python -m qabench questions --doc data/documents/sample_meridian.md
 
 # Only summarize
@@ -83,9 +84,8 @@ python -m qabench summarize --doc data/documents/sample_meridian.md -o out.md
 
 ### Comparing several summaries fairly
 
-The generated questions are cached per document (`runs/cache/`) and the cache
-key does **not** depend on the models. So all comparisons below run against the
-**same** set of questions automatically.
+All comparisons below automatically run against the **same** set of questions
+(see [Question caching](#question-caching) below).
 
 **Comparing summarizer models** (which model writes the most informative
 summary) – override `--summarizer` per run; questions and `answerer` stay
@@ -105,6 +105,40 @@ reports (the `Models:` line records which summarizer was used).
 ```bash
 python -m qabench run -d doc.md -s summaries/method_A.md
 python -m qabench run -d doc.md -s summaries/method_B.md
+```
+
+## Question caching
+
+Generating questions costs a call to the `strong` model, so questions are
+**cached per document** under `runs/cache/`. The cache key is a hash of the
+document text, `count`, question types, detected language and the prompt
+version — it does **not** depend on the chosen models.
+
+- The **first** `run` (or `questions`) for a given document + `--count`
+  generates the questions and stores them — no flag needed.
+- Every later `run` / `questions` with the same key **reuses** them
+  automatically, instantly and without calling the model again. This is exactly
+  what makes comparing different summarizers fair: they all face the identical
+  questions.
+
+### `--regenerate-questions`
+
+This flag forces a **fresh** set of questions even when a cached one exists, and
+overwrites the cache. Without it, an existing cache is always reused.
+
+Use it when you want new questions, e.g.:
+- after editing the document,
+- to draw a different sample of questions,
+- when starting a fresh benchmark series.
+
+> When comparing several models, pass `--regenerate-questions` **only on the
+> first run** so one canonical question set is created — then leave it off for
+> all following runs so they reuse that exact set.
+
+```bash
+python -m qabench run -d doc.md --count 50 --summarizer model_A --regenerate-questions  # creates the set
+python -m qabench run -d doc.md --count 50 --summarizer model_B                          # reuses it
+python -m qabench run -d doc.md --count 50 --summarizer model_C                          # reuses it
 ```
 
 ## Output
