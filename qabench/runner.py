@@ -57,11 +57,48 @@ def load_or_generate_questions(
     return questions
 
 
+def load_questions_file(path: str | Path) -> list[Question]:
+    """Loads a fixed set of questions from a file, bypassing generation/cache.
+
+    Accepts several shapes so you can point it at:
+      - a run's `questions.json` or a `runs/cache/*.questions.json` (a JSON list),
+      - a run's `artifacts.json` (object with `result.results[].question`),
+      - an object with a top-level `questions` list,
+      - a plain list of strings.
+    """
+    path = Path(path)
+    if not path.exists():
+        raise FileNotFoundError(f"Questions file not found: {path}")
+    data = json.loads(path.read_text(encoding="utf-8"))
+
+    if isinstance(data, dict) and "result" in data:  # artifacts.json
+        items = [r["question"] for r in data["result"].get("results", [])]
+    elif isinstance(data, dict) and "questions" in data:
+        items = data["questions"]
+    elif isinstance(data, list):
+        items = data
+    else:
+        raise ValueError(f"Unrecognized questions file format: {path}")
+
+    questions: list[Question] = []
+    for i, item in enumerate(items, start=1):
+        if isinstance(item, str):
+            questions.append(Question(id=i, text=item))
+        else:
+            questions.append(
+                Question(id=i, text=item["text"], type=item.get("type", "factual"))
+            )
+    if not questions:
+        raise ValueError(f"No questions found in file: {path}")
+    return questions
+
+
 def run_benchmark(
     doc_path: str | Path,
     cfg: Config,
     summary_path: Optional[str | Path] = None,
     regenerate_questions: bool = False,
+    questions_path: Optional[str | Path] = None,
     on_progress: Optional[ProgressCb] = None,
 ) -> RunResult:
     doc_path = Path(doc_path)
@@ -80,9 +117,13 @@ def run_benchmark(
     strong = build_provider(cfg.models.strong)
     answerer = build_provider(cfg.models.answerer)
 
-    questions = load_or_generate_questions(
-        text, doc_path, cfg, strong, regenerate_questions, language
-    )
+    if questions_path is not None:
+        # Reuse a fixed question set from a previous run / file.
+        questions = load_questions_file(questions_path)
+    else:
+        questions = load_or_generate_questions(
+            text, doc_path, cfg, strong, regenerate_questions, language
+        )
 
     # --- Summary: generate or load from file ---
     if summary_path is not None:

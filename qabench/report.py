@@ -129,6 +129,11 @@ def save_run(result: RunResult, cfg: Config, metrics: dict[str, Any]) -> Path:
     )
     (out_dir / "report.md").write_text(_render_markdown(result, cfg, metrics), encoding="utf-8")
     (out_dir / "summary.txt").write_text(result.summary, encoding="utf-8")
+    # Standalone question set, so it can be reused via `run --questions <path>`.
+    (out_dir / "questions.json").write_text(
+        json.dumps([r.question.model_dump() for r in result.results], ensure_ascii=False, indent=2),
+        encoding="utf-8",
+    )
     return out_dir
 
 

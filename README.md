@@ -141,12 +141,29 @@ python -m qabench run -d doc.md --count 50 --summarizer model_B                 
 python -m qabench run -d doc.md --count 50 --summarizer model_C                          # reuses it
 ```
 
+### Reusing a fixed question set (`--questions`)
+
+Every run also saves a standalone `questions.json` in its output folder. To run
+against that exact set later — independent of document edits, `count` or prompt
+changes — pass it explicitly:
+
+```bash
+python -m qabench run -d doc.md \
+  --questions runs/doc_20260603_153007/questions.json \
+  --summarizer model_X
+```
+
+`--questions` (short `-q`) skips generation and the cache entirely. It accepts a
+run's `questions.json`, its `artifacts.json`, or a `runs/cache/*.questions.json`
+file.
+
 ## Output
 
 Each run produces `runs/<document>_<timestamp>/`:
 - `report.md` – metrics + every question in detail (reference, candidate, evidence)
 - `artifacts.json` – complete raw data (questions, answers, verdicts, config)
 - `summary.txt` – the summary that was used
+- `questions.json` – the question set used (reusable via `run --questions`)
 
 In addition, an overview table is printed to the console.
 

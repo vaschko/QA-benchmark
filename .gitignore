@@ -14,3 +14,5 @@ env/
 
 # Local third-party test document (not redistributed)
 /data/documents/BMW_test.pdf
+*.lock
+/node_modules

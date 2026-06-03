@@ -39,6 +39,11 @@ def run(
     regenerate_questions: bool = typer.Option(
         False, "--regenerate-questions", help="Ignore cached questions and regenerate."
     ),
+    questions_file: Optional[Path] = typer.Option(
+        None, "--questions", "-q",
+        help="Reuse a fixed question set from a file (a previous run's questions.json / "
+             "artifacts.json, or a cache file). Skips generation and the cache.",
+    ),
     count: Optional[int] = typer.Option(
         None, "--count", "-n", help="Number of questions (overrides questions.count from the config)."
     ),
@@ -72,7 +77,8 @@ def run(
 
         result = run_benchmark(
             doc, cfg, summary_path=summary,
-            regenerate_questions=regenerate_questions, on_progress=on_progress,
+            regenerate_questions=regenerate_questions, questions_path=questions_file,
+            on_progress=on_progress,
         )
 
     metrics = compute_metrics(result, cfg)
