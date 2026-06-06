@@ -56,11 +56,17 @@ def run(
     strong: Optional[str] = typer.Option(
         None, "--strong", help="Override the strong model (question generation + judge)."
     ),
+    target_words: Optional[int] = typer.Option(
+        None, "--target-words", "-w",
+        help="Target summary length in words (overrides summary.target_words).",
+    ),
 ):
     """Full benchmark run for a document."""
     cfg = load_config(config)
     if count is not None:
         cfg.questions.count = count
+    if target_words is not None:
+        cfg.summary.target_words = target_words
     _apply_model_overrides(cfg, summarizer=summarizer, answerer=answerer, strong=strong)
 
     with Progress(
@@ -132,12 +138,18 @@ def summarize(
     summarizer: Optional[str] = typer.Option(
         None, "--summarizer", help="Override the summarizer model."
     ),
+    target_words: Optional[int] = typer.Option(
+        None, "--target-words", "-w",
+        help="Target summary length in words (overrides summary.target_words).",
+    ),
 ):
     """Only create a summary with the summarizer model."""
     from .language import detect_language
     from .loaders import load_document
 
     cfg = load_config(config)
+    if target_words is not None:
+        cfg.summary.target_words = target_words
     _apply_model_overrides(cfg, summarizer=summarizer)
     text = load_document(doc)[: cfg.answering.max_context_chars]
     language = detect_language(text)

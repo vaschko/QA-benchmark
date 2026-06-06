@@ -15,4 +15,8 @@ def build_provider(cfg: ModelConfig) -> LLMProvider:
         from .anthropic_provider import AnthropicProvider
 
         return AnthropicProvider(cfg.model, cfg.options, cfg.api_key_env)
+    if cfg.provider == "openai":
+        from .openai_provider import OpenAIProvider
+
+        return OpenAIProvider(cfg.model, cfg.options, cfg.api_key_env)
     raise ValueError(f"Unknown provider: {cfg.provider!r}")

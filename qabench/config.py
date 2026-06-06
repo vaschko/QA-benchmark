@@ -3,18 +3,25 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any, Literal
+from typing import Any, Literal, Optional
 
 import yaml
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 
 class ModelConfig(BaseModel):
-    provider: Literal["ollama", "anthropic"] = "ollama"
+    provider: Literal["ollama", "anthropic", "openai"] = "ollama"
     model: str
     options: dict[str, Any] = Field(default_factory=dict)
-    # Only for provider=anthropic: name of the env var holding the API key.
-    api_key_env: str = "ANTHROPIC_API_KEY"
+    # Name of the env var holding the API key (for anthropic/openai). If None,
+    # each provider uses its own default (ANTHROPIC_API_KEY / OPENAI_API_KEY).
+    api_key_env: Optional[str] = None
+
+    @field_validator("options", mode="before")
+    @classmethod
+    def _options_default(cls, v):
+        # An empty `options:` in YAML parses to None -> treat as no options.
+        return v or {}
 
 
 class ModelsConfig(BaseModel):

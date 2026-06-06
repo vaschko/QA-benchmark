@@ -6,9 +6,8 @@ parametric prior knowledge.
 """
 
 from __future__ import annotations
-import textwrap
 
-PROMPTS_VERSION = "5"
+PROMPTS_VERSION = "4"
 
 NOT_IN_DOC = "NOT_IN_DOCUMENT"
 NOT_KNOWN = "NOT_KNOWN"
@@ -41,23 +40,11 @@ def question_gen(count: int, types: list[str], language: str) -> tuple[str, str]
 # Summary (model under test)
 # --------------------------------------------------------------------------
 def summarize(target_words: int, language: str) -> tuple[str, str]:
-    """Build (system, user) prompts for faithful legal-document summarization.
-
-    The document text is supplied by the caller (appended after the user
-    message). For benchmarking, call with identical target_words and language
-    across every model so the prompts stay byte-identical and output
-    differences reflect the model alone.
-    """
-    system = textwrap.dedent("""\
-        You are a meticulous legal summarizer. Produce a faithful summary of the document using only information it contains. Invent nothing, infer nothing, and add no outside legal knowledge, analysis, or recommendations.
-
-        - Preserve every legally operative detail exactly as written: party names, dates, deadlines, monetary amounts, percentages, defined terms, governing law, jurisdiction, and any citations or section references. Keep these verbatim even when the summary is in another language; do not translate or reformat names, defined terms, citations, or numeric values.
-        - Preserve the force of each provision. Keep obligations ("shall", "must"), permissions ("may"), prohibitions, conditions ("subject to", "provided that"), exceptions, and qualifiers intact; do not soften, strengthen, or generalize them.
-        - Attribute statements to their source. Represent allegations, arguments, and positions as such (e.g. "Plaintiff alleges", "the Agreement provides", "the court held") rather than asserting them as established fact.
-        - Cover the material content (key rights, obligations, conditions, deadlines, liabilities, and remedies) and prioritize it over boilerplate. Do not drop a term that changes the parties' rights or obligations.
-        - Do not resolve ambiguity or infer unstated facts. If the document is unclear or silent on a point, do not fill the gap with a plausible guess.
-        - Stay neutral: do not evaluate the document, predict outcomes, or give legal advice.""")
-
+    system = (
+        "You are a precise summarizer. You render the document's content "
+        "faithfully and invent nothing. Important facts, numbers, names and "
+        "dates are preserved."
+    )
     user = (
         f"Summarize the following document in approximately {target_words} words. "
         f"Language of the summary: {language}. Write exclusively in this language. "

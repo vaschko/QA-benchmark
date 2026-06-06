@@ -185,6 +185,7 @@ def run_benchmark(
     return RunResult(
         document_path=str(doc_path),
         document_chars=len(text),
+        document_words=len(text.split()),
         language=language,
         summary=summary,
         summary_source=summary_source,

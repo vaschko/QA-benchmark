@@ -55,6 +55,9 @@ def compute_metrics(result: RunResult, cfg: Config) -> dict[str, Any]:
         "retention_score_strict": pct(len(matches_discr), len(discriminating)),
         "coverage": pct(sum(1 for r in valid if r.candidate.found), n_valid),
         "contamination_rate": pct(n_valid - len(discriminating), n_valid),
+        "document_words": result.document_words,
+        "summary_words": len(result.summary.split()),
+        "compression_pct": pct(len(result.summary.split()), result.document_words),
         "verdict_counts": verdict_counts,
         "by_type": by_type,
         "match_verdict": match_verdict,
@@ -69,6 +72,10 @@ def print_console(result: RunResult, cfg: Config, metrics: dict[str, Any]) -> No
     console.print(f"Document: {result.document_path}")
     console.print(f"Language: {result.language}")
     console.print(f"Summary:  {result.summary_source}")
+    console.print(
+        f"Compression: {metrics['document_words']:,} → {metrics['summary_words']:,} words "
+        f"({metrics['compression_pct']} % of original)"
+    )
     if result.truncated:
         console.print("[yellow]⚠ Document was truncated to max_context_chars.[/yellow]")
     console.print()
@@ -146,6 +153,8 @@ def _render_markdown(result: RunResult, cfg: Config, m: dict[str, Any]) -> str:
     lines.append(f"- **Models:** strong=`{cfg.models.strong.model}`, "
                  f"summarizer=`{cfg.models.summarizer.model}`, "
                  f"answerer=`{cfg.models.answerer.model}`")
+    lines.append(f"- **Compression:** {m['document_words']:,} → {m['summary_words']:,} words "
+                 f"({m['compression_pct']} % of original)")
     if result.truncated:
         lines.append("- ⚠ **Document truncated** to `max_context_chars`.")
     lines.append("")

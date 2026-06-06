@@ -26,18 +26,26 @@ models:
     #   max_tokens: 2000
 
   summarizer:
-    provider: ollama
-    model: gemma4:e4b
-    options:
-      temperature: 0.3
-      num_ctx: 32768
+    #provider: ollama
+    #model: gemma4:e4b
+    #options:
+    #  temperature: 0.3
+    #  num_ctx: 32768
+    # --- Alternative: OpenAI-API (needs OPENAI_API_KEY) ---
+    provider: openai
+    model: gpt-5.5
+    api_key_env: OPENAI_API_KEY   # optional; this is the default for openai
 
   answerer:
-    provider: ollama
-    model: qwen3.6:35b-a3b-q4_K_M
-    options:
-      temperature: 0.0
-      num_ctx: 32768
+     provider: ollama
+     model: qwen3.6:35b-a3b-q4_K_M
+     options:
+       temperature: 0.0
+       num_ctx: 32768
+    # --- OpenAI-API (needs OPENAI_API_KEY) ---
+    #provider: openai
+    #model: gpt-5.5
+    #api_key_env: OPENAI_API_KEY
 
 questions:
   count: 50

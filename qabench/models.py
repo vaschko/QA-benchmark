@@ -47,6 +47,7 @@ class QuestionResult(BaseModel):
 class RunResult(BaseModel):
     document_path: str
     document_chars: int
+    document_words: int = 0      # word count of the (truncated) document
     language: str = ""           # detected document language
     summary: str
     summary_source: str          # "generated" or path to the summary file

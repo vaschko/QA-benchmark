@@ -22,9 +22,10 @@ class AnthropicProvider(LLMProvider):
         self,
         model: str,
         options: Optional[dict[str, Any]] = None,
-        api_key_env: str = "ANTHROPIC_API_KEY",
+        api_key_env: Optional[str] = None,
     ):
         super().__init__(model, options)
+        api_key_env = api_key_env or "ANTHROPIC_API_KEY"
         try:
             from anthropic import Anthropic
         except ImportError as exc:  # pragma: no cover
