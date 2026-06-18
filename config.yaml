@@ -56,11 +56,18 @@ questions:
   #   material -> die Kerninhalte, die eine treue Summary behalten MUSS
   #               (Pflichten, Rechte, Fristen, Haftung) statt Trivia
   # Pro Lauf ueberschreibbar mit --focus; beide Sets werden separat gecacht.
-  focus: detailed
+  focus: material
 
 summary:
-  mode: generate        # generate | file
-  target_words: 300     # nur relevant bei mode=generate
+  # generate     -> eine Zusammenfassung des GESAMTEN Dokuments (nutzt target_words)
+  # per_section  -> jede Section einzeln zusammenfassen + konkatenieren
+  #                 (spiegelt das section-weise Produktiv-Tool)
+  # file         -> per --summary uebergebene Datei wird genutzt
+  mode: per_section
+  target_words: 300     # nur relevant bei mode=generate (Gesamtlaenge)
+  # nur bei mode=per_section: jede Section-Summary auf diesen Anteil ihrer Laenge
+  # zielen (z.B. 0.15). Leer/auskommentiert = adaptiv, keine harte Vorgabe.
+  # compression: 0.15
 
 answering:
   closed_book_baseline: true   # jede Frage zusätzlich OHNE Kontext -> Kontaminationscheck

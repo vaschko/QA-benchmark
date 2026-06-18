@@ -118,6 +118,21 @@ python -m qabench run -d doc.md -s summaries/method_A.md
 python -m qabench run -d doc.md -s summaries/method_B.md
 ```
 
+## Summary modes (`summary.mode`)
+
+- **`generate`** (default in code): one summary of the whole document, targeting
+  `summary.target_words` (an absolute total — note this is document-dependent).
+- **`per_section`**: summarize each section separately and concatenate, mirroring
+  a section-by-section production summarizer. Length is **adaptive** (each section
+  summary is as short as its content allows) — no global word target needed. To
+  force a length, set `summary.compression` (a fraction of each section's length,
+  e.g. `0.15`), which scales with any document instead of a fixed word count.
+- **`file`**: benchmark a summary supplied via `--summary <path>` as-is.
+
+Override per run with `--summary-mode generate|per_section`. Because the report
+shows the **retention score next to the compression %**, you can compare models
+fairly even at adaptive (unequal) lengths: read retention relative to compression.
+
 ## Section-based benchmarking
 
 The production summarizer works **section by section**, so the benchmark can too.

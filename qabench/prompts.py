@@ -97,6 +97,17 @@ def question_gen_section(
 # --------------------------------------------------------------------------
 # Summary (model under test)
 # --------------------------------------------------------------------------
+_SUMMARIZER_SYSTEM = textwrap.dedent("""\
+    You are a meticulous legal summarizer. Produce a faithful summary of the document using only information it contains. Invent nothing, infer nothing, and add no outside legal knowledge, analysis, or recommendations.
+
+    - Preserve every legally operative detail exactly as written: party names, dates, deadlines, monetary amounts, percentages, defined terms, governing law, jurisdiction, and any citations or section references. Keep these verbatim even when the summary is in another language; do not translate or reformat names, defined terms, citations, or numeric values.
+    - Preserve the force of each provision. Keep obligations ("shall", "must"), permissions ("may"), prohibitions, conditions ("subject to", "provided that"), exceptions, and qualifiers intact; do not soften, strengthen, or generalize them.
+    - Attribute statements to their source. Represent allegations, arguments, and positions as such (e.g. "Plaintiff alleges", "the Agreement provides", "the court held") rather than asserting them as established fact.
+    - Cover the material content (key rights, obligations, conditions, deadlines, liabilities, and remedies) and prioritize it over boilerplate. Do not drop a term that changes the parties' rights or obligations.
+    - Do not resolve ambiguity or infer unstated facts. If the document is unclear or silent on a point, do not fill the gap with a plausible guess.
+    - Stay neutral: do not evaluate the document, predict outcomes, or give legal advice.""")
+
+
 def summarize(target_words: int, language: str) -> tuple[str, str]:
     """Build (system, user) prompts for faithful legal-document summarization.
 
@@ -105,22 +116,33 @@ def summarize(target_words: int, language: str) -> tuple[str, str]:
     across every model so the prompts stay byte-identical and output
     differences reflect the model alone.
     """
-    system = textwrap.dedent("""\
-        You are a meticulous legal summarizer. Produce a faithful summary of the document using only information it contains. Invent nothing, infer nothing, and add no outside legal knowledge, analysis, or recommendations.
-
-        - Preserve every legally operative detail exactly as written: party names, dates, deadlines, monetary amounts, percentages, defined terms, governing law, jurisdiction, and any citations or section references. Keep these verbatim even when the summary is in another language; do not translate or reformat names, defined terms, citations, or numeric values.
-        - Preserve the force of each provision. Keep obligations ("shall", "must"), permissions ("may"), prohibitions, conditions ("subject to", "provided that"), exceptions, and qualifiers intact; do not soften, strengthen, or generalize them.
-        - Attribute statements to their source. Represent allegations, arguments, and positions as such (e.g. "Plaintiff alleges", "the Agreement provides", "the court held") rather than asserting them as established fact.
-        - Cover the material content (key rights, obligations, conditions, deadlines, liabilities, and remedies) and prioritize it over boilerplate. Do not drop a term that changes the parties' rights or obligations.
-        - Do not resolve ambiguity or infer unstated facts. If the document is unclear or silent on a point, do not fill the gap with a plausible guess.
-        - Stay neutral: do not evaluate the document, predict outcomes, or give legal advice.""")
-
     user = (
         f"Summarize the following document in approximately {target_words} words. "
         f"Language of the summary: {language}. Write exclusively in this language. "
         "Output only the summary, without any preamble."
     )
-    return system, user
+    return _SUMMARIZER_SYSTEM, user
+
+
+def summarize_section(target_words: int | None, language: str) -> tuple[str, str]:
+    """Summarize a single SECTION of a larger document.
+
+    Same faithful-summarizer rules. With ``target_words=None`` the length is left
+    adaptive (the summary is as short as the section allows without dropping
+    material detail) -- mirroring a per-section production summarizer; pass a value
+    only to force a per-section length (e.g. a fixed compression ratio).
+    """
+    length = (
+        f"in approximately {target_words} words"
+        if target_words
+        else "as concisely as its content allows, without dropping any material detail"
+    )
+    user = (
+        f"Summarize the following section of a larger document {length}. "
+        f"Language of the summary: {language}. Write exclusively in this language. "
+        "Output only the summary, without any preamble."
+    )
+    return _SUMMARIZER_SYSTEM, user
 
 
 # --------------------------------------------------------------------------

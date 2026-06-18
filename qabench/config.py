@@ -42,8 +42,15 @@ class QuestionsConfig(BaseModel):
 
 
 class SummaryConfig(BaseModel):
-    mode: Literal["generate", "file"] = "generate"
-    target_words: int = 300
+    # "generate"    -> one summary of the whole document (uses target_words)
+    # "per_section" -> summarize each section separately and concatenate, mirroring
+    #                  a section-by-section production summarizer
+    # "file"        -> a summary supplied via --summary (path) is used as-is
+    mode: Literal["generate", "per_section", "file"] = "generate"
+    target_words: int = 300        # only for mode=generate (total length)
+    # Only for mode=per_section: target each section summary at this fraction of the
+    # section's length (e.g. 0.15). None = adaptive, no hard per-section target.
+    compression: Optional[float] = None
 
 
 class AnsweringConfig(BaseModel):

@@ -21,7 +21,7 @@ from .models import Question, QuestionResult, RunResult
 from .pipeline.answer import answer_closed_book, answer_with_context
 from .pipeline.judge import judge_answer
 from .pipeline.questions import generate_questions, generate_questions_by_section
-from .pipeline.summarize import make_summary
+from .pipeline.summarize import make_section_summaries, make_summary
 from .prompts import PROMPTS_VERSION
 from .providers import build_provider
 from .splitter import split_into_sections
@@ -158,8 +158,12 @@ def run_benchmark(
         summary_source = str(summary_path)
     else:
         summarizer = build_provider(cfg.models.summarizer)
-        summary = make_summary(text, cfg, summarizer, language)
-        summary_source = "generated"
+        if cfg.summary.mode == "per_section":
+            summary = make_section_summaries(text, cfg, summarizer, language)
+            summary_source = "generated (per section)"
+        else:
+            summary = make_summary(text, cfg, summarizer, language)
+            summary_source = "generated"
     if len(summary) > maxc:
         summary = summary[:maxc]
 

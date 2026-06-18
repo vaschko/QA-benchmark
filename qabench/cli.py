@@ -65,6 +65,11 @@ def run(
         help="Question focus: 'detailed' (concrete trivia) or 'material' (key "
              "content a summary should preserve). Overrides questions.focus.",
     ),
+    summary_mode: Optional[str] = typer.Option(
+        None, "--summary-mode",
+        help="Summary mode: 'generate' (one global summary) or 'per_section' "
+             "(summarize each section). Overrides summary.mode.",
+    ),
 ):
     """Full benchmark run for a document."""
     cfg = load_config(config)
@@ -74,6 +79,8 @@ def run(
         cfg.summary.target_words = target_words
     if focus is not None:
         cfg.questions.focus = focus
+    if summary_mode is not None:
+        cfg.summary.mode = summary_mode
     _apply_model_overrides(cfg, summarizer=summarizer, answerer=answerer, strong=strong)
 
     with Progress(
@@ -195,19 +202,29 @@ def summarize(
         None, "--target-words", "-w",
         help="Target summary length in words (overrides summary.target_words).",
     ),
+    summary_mode: Optional[str] = typer.Option(
+        None, "--summary-mode",
+        help="Summary mode: 'generate' or 'per_section' (overrides summary.mode).",
+    ),
 ):
     """Only create a summary with the summarizer model."""
     from .language import detect_language
     from .loaders import load_document
+    from .pipeline.summarize import make_section_summaries
 
     cfg = load_config(config)
     if target_words is not None:
         cfg.summary.target_words = target_words
+    if summary_mode is not None:
+        cfg.summary.mode = summary_mode
     _apply_model_overrides(cfg, summarizer=summarizer)
     text = load_document(doc)[: cfg.answering.max_context_chars]
     language = detect_language(text)
     provider = build_provider(cfg.models.summarizer)
-    text_summary = make_summary(text, cfg, provider, language)
+    if cfg.summary.mode == "per_section":
+        text_summary = make_section_summaries(text, cfg, provider, language)
+    else:
+        text_summary = make_summary(text, cfg, provider, language)
     if out:
         out.write_text(text_summary, encoding="utf-8")
         console.print(f"[bold]Saved:[/bold] {out}")
