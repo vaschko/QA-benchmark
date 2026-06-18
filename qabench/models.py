@@ -20,6 +20,8 @@ class Question(BaseModel):
     id: int
     text: str
     type: str = "factual"
+    section_index: int = -1   # source section (-1 = whole document / not sectioned)
+    section_title: str = ""   # title of the source section, for the report
 
 
 class Answer(BaseModel):

@@ -46,6 +46,22 @@ def compute_metrics(result: RunResult, cfg: Config) -> dict[str, Any]:
         if is_match(r):
             bucket["match"] += 1
 
+    # Breakdown by source section (only when questions were generated per section)
+    by_section: list[dict[str, Any]] = []
+    if any(r.question.section_index >= 0 for r in valid):
+        buckets: dict[int, dict[str, Any]] = {}
+        for r in valid:
+            si = r.question.section_index
+            b = buckets.setdefault(
+                si, {"index": si, "title": r.question.section_title, "total": 0, "match": 0}
+            )
+            b["total"] += 1
+            if is_match(r):
+                b["match"] += 1
+        for b in sorted(buckets.values(), key=lambda x: x["index"]):
+            b["retention"] = pct(b["match"], b["total"])
+            by_section.append(b)
+
     return {
         "total_questions": len(results),
         "valid_questions": n_valid,
@@ -60,6 +76,7 @@ def compute_metrics(result: RunResult, cfg: Config) -> dict[str, Any]:
         "compression_pct": pct(len(result.summary.split()), result.document_words),
         "verdict_counts": verdict_counts,
         "by_type": by_type,
+        "by_section": by_section,
         "match_verdict": match_verdict,
     }
 
@@ -72,6 +89,7 @@ def print_console(result: RunResult, cfg: Config, metrics: dict[str, Any]) -> No
     console.print(f"Document: {result.document_path}")
     console.print(f"Language: {result.language}")
     console.print(f"Summary:  {result.summary_source}")
+    console.print(f"Questions: focus={cfg.questions.focus}, scope={cfg.answering.context_scope}")
     console.print(
         f"Compression: {metrics['document_words']:,} → {metrics['summary_words']:,} words "
         f"({metrics['compression_pct']} % of original)"
@@ -86,6 +104,24 @@ def print_console(result: RunResult, cfg: Config, metrics: dict[str, Any]) -> No
     console.print(f"Contamination rate (prior knowledge): {metrics['contamination_rate']} %  "
                   f"-> {metrics['discriminating_questions']}/{metrics['valid_questions']} questions discriminating")
     console.print()
+
+    if metrics.get("by_section"):
+        sec_table = Table(show_lines=False, header_style="bold", title="Retention by section")
+        sec_table.add_column("#", justify="right")
+        sec_table.add_column("Section", max_width=46)
+        sec_table.add_column("Retention", justify="right")
+        sec_table.add_column("Match/Valid", justify="right")
+        for b in metrics["by_section"]:
+            ret = b["retention"]
+            color = "green" if ret >= 66 else "yellow" if ret >= 33 else "red"
+            sec_table.add_row(
+                str(b["index"]),
+                b["title"],
+                f"[{color}]{ret} %[/{color}]",
+                f"{b['match']}/{b['total']}",
+            )
+        console.print(sec_table)
+        console.print()
 
     table = Table(show_lines=False, header_style="bold")
     table.add_column("#", justify="right")
@@ -153,6 +189,8 @@ def _render_markdown(result: RunResult, cfg: Config, m: dict[str, Any]) -> str:
     lines.append(f"- **Models:** strong=`{cfg.models.strong.model}`, "
                  f"summarizer=`{cfg.models.summarizer.model}`, "
                  f"answerer=`{cfg.models.answerer.model}`")
+    lines.append(f"- **Question focus:** {cfg.questions.focus} · "
+                 f"**context scope:** {cfg.answering.context_scope}")
     lines.append(f"- **Compression:** {m['document_words']:,} → {m['summary_words']:,} words "
                  f"({m['compression_pct']} % of original)")
     if result.truncated:
@@ -175,10 +213,22 @@ def _render_markdown(result: RunResult, cfg: Config, m: dict[str, Any]) -> str:
             lines.append(f"| {t} | {b['match']} | {b['total']} |")
         lines.append("")
 
+    if m.get("by_section"):
+        lines.append("### Retention by section\n")
+        lines.append("| # | Section | Retention | Match/Valid |")
+        lines.append("|---|---|---|---|")
+        for b in m["by_section"]:
+            lines.append(
+                f"| {b['index']} | {b['title']} | {b['retention']} % | {b['match']}/{b['total']} |"
+            )
+        lines.append("")
+
     lines.append("## Questions in detail\n")
     for r in result.results:
         verdict = r.judgement.verdict if r.judgement else "—"
         lines.append(f"### {r.question.id}. ({r.question.type}) {r.question.text}\n")
+        if r.question.section_index >= 0:
+            lines.append(f"- **Section:** {r.question.section_title}")
         lines.append(f"- **Verdict:** {verdict}" + (f" — {r.judgement.reason}" if r.judgement else ""))
         lines.append(f"- **Reference (original):** {r.reference.answer}")
         if r.reference.evidence:

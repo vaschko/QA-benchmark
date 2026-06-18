@@ -17,15 +17,51 @@ NOT_KNOWN = "NOT_KNOWN"
 # --------------------------------------------------------------------------
 # Question generation (strong model)
 # --------------------------------------------------------------------------
-def question_gen(count: int, types: list[str], language: str) -> tuple[str, str]:
-    system = (
-        "You are an exam designer. From a given document you create questions "
-        "that can be answered exclusively from the content of that document. "
-        "Good questions are specific and target concrete facts, numbers, names, "
-        "dates, definitions or relationships in the document. Avoid questions "
-        "that anyone could answer from general knowledge without the document, "
-        "and questions whose answer is not in the document."
+def _exam_designer_system(focus: str, scope: str) -> str:
+    """Build the exam-designer system prompt.
+
+    `scope` is "document" or "section"; `focus` is "detailed" (concrete
+    facts/numbers/names) or "material" (the key content a faithful summary must
+    preserve, rather than incidental trivia).
+    """
+    if scope == "section":
+        intro = (
+            "You are an exam designer. From a given section of a larger document "
+            "you create questions that can be answered exclusively from the "
+            "content of that section. "
+        )
+    else:
+        intro = (
+            "You are an exam designer. From a given document you create questions "
+            "that can be answered exclusively from the content of that document. "
+        )
+
+    if focus == "material":
+        body = (
+            f"Good questions target the MATERIAL content that a faithful summary "
+            f"must preserve: the key obligations, rights, permissions, "
+            f"prohibitions, conditions, deadlines, liabilities, remedies and the "
+            f"main point of each provision in the {scope}. Prefer what changes "
+            f"the parties' rights or duties over incidental trivia such as exact "
+            f"email addresses, individual entity names or minor cross-references. "
+        )
+    else:
+        body = (
+            f"Good questions are specific and target concrete facts, numbers, "
+            f"names, dates, definitions or relationships in the {scope}. "
+        )
+
+    outro = (
+        f"Avoid questions that anyone could answer from general knowledge without "
+        f"the {scope}, and questions whose answer is not in the {scope}."
     )
+    return intro + body + outro
+
+
+def question_gen(
+    count: int, types: list[str], language: str, focus: str = "detailed"
+) -> tuple[str, str]:
+    system = _exam_designer_system(focus, "document")
     user = (
         f"Create exactly {count} questions about the following document. "
         f"Spread the questions across these types where possible: {', '.join(types)}. "
@@ -37,9 +73,41 @@ def question_gen(count: int, types: list[str], language: str) -> tuple[str, str]
     return system, user
 
 
+def question_gen_section(
+    count: int, types: list[str], language: str, section_title: str, focus: str = "detailed"
+) -> tuple[str, str]:
+    """Question generation from a single SECTION of a larger document.
+
+    Same exam-designer rules as `question_gen`, but the model is told the text is
+    one section so it targets that section instead of a whole document.
+    """
+    system = _exam_designer_system(focus, "section")
+    user = (
+        f"Create exactly {count} question(s) about the following section "
+        f'("{section_title}") of a larger document. '
+        f"Spread the questions across these types where possible: {', '.join(types)}. "
+        "Every question must be answerable from THIS section's content alone. "
+        f"IMPORTANT: Language of the questions: {language}. Write ALL questions "
+        "exclusively in this language, regardless of the language of this instruction. "
+        "Return the result exclusively as JSON according to the schema."
+    )
+    return system, user
+
+
 # --------------------------------------------------------------------------
 # Summary (model under test)
 # --------------------------------------------------------------------------
+_SUMMARIZER_SYSTEM = textwrap.dedent("""\
+    You are a meticulous legal summarizer. Produce a faithful summary of the document using only information it contains. Invent nothing, infer nothing, and add no outside legal knowledge, analysis, or recommendations.
+
+    - Preserve every legally operative detail exactly as written: party names, dates, deadlines, monetary amounts, percentages, defined terms, governing law, jurisdiction, and any citations or section references. Keep these verbatim even when the summary is in another language; do not translate or reformat names, defined terms, citations, or numeric values.
+    - Preserve the force of each provision. Keep obligations ("shall", "must"), permissions ("may"), prohibitions, conditions ("subject to", "provided that"), exceptions, and qualifiers intact; do not soften, strengthen, or generalize them.
+    - Attribute statements to their source. Represent allegations, arguments, and positions as such (e.g. "Plaintiff alleges", "the Agreement provides", "the court held") rather than asserting them as established fact.
+    - Cover the material content (key rights, obligations, conditions, deadlines, liabilities, and remedies) and prioritize it over boilerplate. Do not drop a term that changes the parties' rights or obligations.
+    - Do not resolve ambiguity or infer unstated facts. If the document is unclear or silent on a point, do not fill the gap with a plausible guess.
+    - Stay neutral: do not evaluate the document, predict outcomes, or give legal advice.""")
+
+
 def summarize(target_words: int, language: str) -> tuple[str, str]:
     """Build (system, user) prompts for faithful legal-document summarization.
 
@@ -48,22 +116,33 @@ def summarize(target_words: int, language: str) -> tuple[str, str]:
     across every model so the prompts stay byte-identical and output
     differences reflect the model alone.
     """
-    system = textwrap.dedent("""\
-        You are a meticulous legal summarizer. Produce a faithful summary of the document using only information it contains. Invent nothing, infer nothing, and add no outside legal knowledge, analysis, or recommendations.
-
-        - Preserve every legally operative detail exactly as written: party names, dates, deadlines, monetary amounts, percentages, defined terms, governing law, jurisdiction, and any citations or section references. Keep these verbatim even when the summary is in another language; do not translate or reformat names, defined terms, citations, or numeric values.
-        - Preserve the force of each provision. Keep obligations ("shall", "must"), permissions ("may"), prohibitions, conditions ("subject to", "provided that"), exceptions, and qualifiers intact; do not soften, strengthen, or generalize them.
-        - Attribute statements to their source. Represent allegations, arguments, and positions as such (e.g. "Plaintiff alleges", "the Agreement provides", "the court held") rather than asserting them as established fact.
-        - Cover the material content (key rights, obligations, conditions, deadlines, liabilities, and remedies) and prioritize it over boilerplate. Do not drop a term that changes the parties' rights or obligations.
-        - Do not resolve ambiguity or infer unstated facts. If the document is unclear or silent on a point, do not fill the gap with a plausible guess.
-        - Stay neutral: do not evaluate the document, predict outcomes, or give legal advice.""")
-
     user = (
         f"Summarize the following document in approximately {target_words} words. "
         f"Language of the summary: {language}. Write exclusively in this language. "
         "Output only the summary, without any preamble."
     )
-    return system, user
+    return _SUMMARIZER_SYSTEM, user
+
+
+def summarize_section(target_words: int | None, language: str) -> tuple[str, str]:
+    """Summarize a single SECTION of a larger document.
+
+    Same faithful-summarizer rules. With ``target_words=None`` the length is left
+    adaptive (the summary is as short as the section allows without dropping
+    material detail) -- mirroring a per-section production summarizer; pass a value
+    only to force a per-section length (e.g. a fixed compression ratio).
+    """
+    length = (
+        f"in approximately {target_words} words"
+        if target_words
+        else "as concisely as its content allows, without dropping any material detail"
+    )
+    user = (
+        f"Summarize the following section of a larger document {length}. "
+        f"Language of the summary: {language}. Write exclusively in this language. "
+        "Output only the summary, without any preamble."
+    )
+    return _SUMMARIZER_SYSTEM, user
 
 
 # --------------------------------------------------------------------------

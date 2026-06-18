@@ -60,6 +60,16 @@ def run(
         None, "--target-words", "-w",
         help="Target summary length in words (overrides summary.target_words).",
     ),
+    focus: Optional[str] = typer.Option(
+        None, "--focus",
+        help="Question focus: 'detailed' (concrete trivia) or 'material' (key "
+             "content a summary should preserve). Overrides questions.focus.",
+    ),
+    summary_mode: Optional[str] = typer.Option(
+        None, "--summary-mode",
+        help="Summary mode: 'generate' (one global summary) or 'per_section' "
+             "(summarize each section). Overrides summary.mode.",
+    ),
 ):
     """Full benchmark run for a document."""
     cfg = load_config(config)
@@ -67,6 +77,10 @@ def run(
         cfg.questions.count = count
     if target_words is not None:
         cfg.summary.target_words = target_words
+    if focus is not None:
+        cfg.questions.focus = focus
+    if summary_mode is not None:
+        cfg.summary.mode = summary_mode
     _apply_model_overrides(cfg, summarizer=summarizer, answerer=answerer, strong=strong)
 
     with Progress(
@@ -103,6 +117,9 @@ def questions(
     strong: Optional[str] = typer.Option(
         None, "--strong", help="Override the strong model (question generation)."
     ),
+    focus: Optional[str] = typer.Option(
+        None, "--focus", help="Question focus: 'detailed' or 'material' (overrides questions.focus)."
+    ),
     regenerate_questions: bool = typer.Option(
         False, "--regenerate-questions", help="Ignore cached questions and regenerate."
     ),
@@ -118,6 +135,8 @@ def questions(
     cfg = load_config(config)
     if count is not None:
         cfg.questions.count = count
+    if focus is not None:
+        cfg.questions.focus = focus
     _apply_model_overrides(cfg, strong=strong)
     text = load_document(doc)[: cfg.answering.max_context_chars]
     language = detect_language(text)
@@ -128,6 +147,47 @@ def questions(
     console.print(f"[dim]Language: {language}[/dim]")
     for q in qs:
         console.print(f"[bold]{q.id}.[/bold] ({q.type}) {q.text}")
+
+
+@app.command()
+def sections(
+    doc: Path = typer.Option(..., "--doc", "-d", help="Path to the document."),
+    config: Path = typer.Option("config.yaml", "--config", "-c"),
+    show_content: bool = typer.Option(
+        False, "--show-content", help="Also print the start of each section's text."
+    ),
+):
+    """Split a document into sections and show the result (no LLM calls).
+
+    Use this to check how a document is divided before benchmarking -- it makes
+    the chosen strategy (markdown / numbered / keyword / roman / allcaps /
+    paragraph fallback) and the section boundaries visible.
+    """
+    from .loaders import load_document
+    from .splitter import split_into_sections
+
+    cfg = load_config(config)
+    text = load_document(doc)
+    secs = split_into_sections(
+        text,
+        min_headings=cfg.sections.min_headings,
+        max_chunk_chars=cfg.sections.max_chunk_chars,
+        keep_preamble=cfg.sections.keep_preamble,
+        max_depth=cfg.sections.max_depth,
+    )
+    method = secs[0].method if secs else "-"
+    console.print(
+        f"[dim]{len(secs)} sections via '{method}' strategy "
+        f"({len(text)} chars total)[/dim]\n"
+    )
+    for s in secs:
+        console.print(
+            f"[bold]{s.index}.[/bold] [cyan]{s.title}[/cyan]  "
+            f"[dim](L{s.level}, {s.char_count} chars)[/dim]"
+        )
+        if show_content:
+            preview = s.content[:400].replace("\n", " ")
+            console.print(f"   [dim]{preview}{'…' if s.char_count > 400 else ''}[/dim]\n")
 
 
 @app.command()
@@ -142,19 +202,29 @@ def summarize(
         None, "--target-words", "-w",
         help="Target summary length in words (overrides summary.target_words).",
     ),
+    summary_mode: Optional[str] = typer.Option(
+        None, "--summary-mode",
+        help="Summary mode: 'generate' or 'per_section' (overrides summary.mode).",
+    ),
 ):
     """Only create a summary with the summarizer model."""
     from .language import detect_language
     from .loaders import load_document
+    from .pipeline.summarize import make_section_summaries
 
     cfg = load_config(config)
     if target_words is not None:
         cfg.summary.target_words = target_words
+    if summary_mode is not None:
+        cfg.summary.mode = summary_mode
     _apply_model_overrides(cfg, summarizer=summarizer)
     text = load_document(doc)[: cfg.answering.max_context_chars]
     language = detect_language(text)
     provider = build_provider(cfg.models.summarizer)
-    text_summary = make_summary(text, cfg, provider, language)
+    if cfg.summary.mode == "per_section":
+        text_summary = make_section_summaries(text, cfg, provider, language)
+    else:
+        text_summary = make_summary(text, cfg, provider, language)
     if out:
         out.write_text(text_summary, encoding="utf-8")
         console.print(f"[bold]Saved:[/bold] {out}")
