@@ -31,6 +31,17 @@ original.
   English questions).
 - **Number of questions:** in [config.yaml](config.yaml) under
   `questions.count`, or per run with `--count / -n` (e.g. `-n 20`).
+- **Question focus** (`questions.focus`, or `--focus` per run): `detailed`
+  targets concrete facts, numbers and names (fine-grained recall); `material`
+  targets the key content a faithful summary must preserve (obligations, rights,
+  conditions, deadlines, liabilities) rather than incidental trivia. `material`
+  is the fairer setting when scoring summaries, since a summary is *meant* to drop
+  trivia. The two focuses are cached separately, so you can compare them:
+
+  ```bash
+  python -m qabench run -d doc.pdf --focus detailed
+  python -m qabench run -d doc.pdf --focus material
+  ```
 
 ## Three model roles (`config.yaml`)
 
@@ -46,7 +57,7 @@ Switching is a single line.
 ## Installation
 
 ```bash
-pip install -r requirements.txt   # pypdf, python-docx, anthropic, langdetect
+pip install -r requirements.txt   # PyMuPDF, python-docx, anthropic, langdetect
 ```
 
 For the Claude API additionally:
@@ -106,6 +117,58 @@ reports (the `Models:` line records which summarizer was used).
 python -m qabench run -d doc.md -s summaries/method_A.md
 python -m qabench run -d doc.md -s summaries/method_B.md
 ```
+
+## Section-based benchmarking
+
+The production summarizer works **section by section**, so the benchmark can too.
+With `sections.enabled: true` (in [config.yaml](config.yaml)) the original is
+first split into sections and questions are generated **per section** instead of
+from the whole document at once. This gives two things:
+
+- **Guaranteed coverage** – the question budget (`questions.count`) is
+  distributed across sections proportional to their length, with at least one
+  question per (non-trivial) section. Important clauses buried in the middle of a
+  long T&C can no longer be skipped by the question generator.
+- **A per-section retention score** – the report adds a *Retention by section*
+  table, so you see *where* a summary loses information, not just an aggregate.
+
+Splitting is deterministic and LLM-free. It tries several heading conventions in
+order – Markdown (`#`), numbered (`1.` / `1.1` / `2)`), keyword (`Article` /
+`Section` / `Clause`), roman numerals, ALL-CAPS headings – and falls back to
+paragraph chunking, so a document is **always** split and nothing is lost.
+
+Inspect how a document is split before running the benchmark (no LLM calls):
+
+```bash
+python -m qabench sections -d data/documents/Revolut_Terms.pdf
+python -m qabench sections -d doc.md --show-content
+```
+
+The clean original-vs-summary comparison and the contamination check are
+preserved: the candidate is always answered against the summary, the baseline
+without any context. Settings live under `sections:` in the config
+(`min_headings`, `max_chunk_chars`, `keep_preamble`, `per_section_min_chars`).
+
+### Section-scoped reference answering (`answering.context_scope`)
+
+By default the **reference** answer (the ground truth from the original) is read
+from the *whole* document (`context_scope: full`). For long documents that both
+truncates (`max_context_chars`) and — with local Ollama, which has no prompt
+caching — re-sends the full document on every answer call.
+
+With `context_scope: section` the reference is instead read from the question's
+**own section plus the preamble**, with a **fallback to the full document** when
+the answer isn't found there (for clauses that depend on another section). This:
+
+- **removes truncation** — each section easily fits the context window, so
+  arbitrarily long documents become benchmarkable;
+- **saves context tokens** — roughly 10–40× less context per reference call on
+  Ollama;
+- **improves the ground truth** — the answerer reads a focused section the
+  question was generated from, instead of getting lost in a huge document.
+
+It requires section-tagged questions (`sections.enabled: true`). The candidate
+(summary) and baseline are unaffected.
 
 ## Question caching
 
@@ -220,11 +283,12 @@ qabench/
   config.py      configuration (pydantic)
   models.py      data models + JSON schemas
   loaders.py     txt / md / pdf / docx -> text
+  splitter.py    robust section splitting (multi-strategy + fallback)
   prompts.py     all prompt templates (English)
   language.py    document language detection
   providers/     ollama | anthropic (interchangeable)
   pipeline/      questions / summarize / answer / judge
   runner.py      orchestration + question caching
   report.py      metrics + console + file reports
-  cli.py         run / questions / summarize
+  cli.py         run / questions / sections / summarize
 ```

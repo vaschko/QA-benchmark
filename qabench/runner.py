@@ -20,18 +20,29 @@ from .loaders import load_document
 from .models import Question, QuestionResult, RunResult
 from .pipeline.answer import answer_closed_book, answer_with_context
 from .pipeline.judge import judge_answer
-from .pipeline.questions import generate_questions
+from .pipeline.questions import generate_questions, generate_questions_by_section
 from .pipeline.summarize import make_summary
 from .prompts import PROMPTS_VERSION
 from .providers import build_provider
+from .splitter import split_into_sections
 
 ProgressCb = Callable[[int, int, str], None]
 
 
 def _questions_cache_path(text: str, doc_path: Path, cfg: Config, language: str) -> Path:
+    sec = cfg.sections
+    # Sectioned and non-sectioned runs produce different question sets, so the
+    # sectioning settings are part of the cache key.
+    sec_key = (
+        f"|sec={int(sec.enabled)},{sec.min_headings},{sec.max_chunk_chars},"
+        f"{int(sec.keep_preamble)},{sec.per_section_min_chars}"
+    )
+    # Append focus only when non-default, so existing "detailed" caches stay valid
+    # while "material" gets its own distinct question set.
+    focus_key = "" if cfg.questions.focus == "detailed" else f"|focus={cfg.questions.focus}"
     key_src = (
         f"{text}|{cfg.questions.count}|{','.join(cfg.questions.types)}"
-        f"|{language}|v{PROMPTS_VERSION}"
+        f"|{language}|v{PROMPTS_VERSION}{sec_key}{focus_key}"
     )
     key = hashlib.sha1(key_src.encode("utf-8")).hexdigest()[:10]
     cache_dir = Path(cfg.run.output_dir) / "cache"
@@ -49,7 +60,16 @@ def load_or_generate_questions(
         data = json.loads(cache_path.read_text(encoding="utf-8"))
         return [Question(**q) for q in data]
 
-    questions = generate_questions(text, cfg, provider, language)
+    if cfg.sections.enabled:
+        sections = split_into_sections(
+            text,
+            min_headings=cfg.sections.min_headings,
+            max_chunk_chars=cfg.sections.max_chunk_chars,
+            keep_preamble=cfg.sections.keep_preamble,
+        )
+        questions = generate_questions_by_section(sections, cfg, provider, language)
+    else:
+        questions = generate_questions(text, cfg, provider, language)
     cache_path.write_text(
         json.dumps([q.model_dump() for q in questions], ensure_ascii=False, indent=2),
         encoding="utf-8",
@@ -86,7 +106,13 @@ def load_questions_file(path: str | Path) -> list[Question]:
             questions.append(Question(id=i, text=item))
         else:
             questions.append(
-                Question(id=i, text=item["text"], type=item.get("type", "factual"))
+                Question(
+                    id=i,
+                    text=item["text"],
+                    type=item.get("type", "factual"),
+                    section_index=item.get("section_index", -1),
+                    section_title=item.get("section_title", ""),
+                )
             )
     if not questions:
         raise ValueError(f"No questions found in file: {path}")
@@ -136,6 +162,24 @@ def run_benchmark(
     if len(summary) > maxc:
         summary = summary[:maxc]
 
+    # For section-scoped reference answering, re-split the (already truncated)
+    # original deterministically so each question can be answered against its own
+    # section instead of the whole document. Splitting is rule-based, so these
+    # indices match the ones the section-aware question generator used.
+    section_scoped = cfg.answering.context_scope == "section"
+    by_index: dict[int, str] = {}
+    preamble_index: Optional[int] = None
+    if section_scoped:
+        secs = split_into_sections(
+            text,
+            min_headings=cfg.sections.min_headings,
+            max_chunk_chars=cfg.sections.max_chunk_chars,
+            keep_preamble=cfg.sections.keep_preamble,
+        )
+        by_index = {s.index: s.content for s in secs}
+        preamble = next((s for s in secs if s.title == "Preamble"), None)
+        preamble_index = preamble.index if preamble else None
+
     match_verdict = cfg.judge.scale[0]  # by convention the "full match" verdict
     total = len(questions)
     results: list[QuestionResult] = []
@@ -144,7 +188,22 @@ def run_benchmark(
         if on_progress:
             on_progress(idx - 1, total, f"Question {idx}/{total}")
 
-        reference = answer_with_context(q, text, cfg, answerer, language)
+        # Reference (ground truth) context: the question's own section (+ preamble)
+        # when section-scoped, otherwise the full document.
+        scoped = section_scoped and q.section_index in by_index
+        if scoped:
+            parts = []
+            if preamble_index is not None and q.section_index != preamble_index:
+                parts.append(by_index[preamble_index])
+            parts.append(by_index[q.section_index])
+            ref_context = "\n\n".join(parts)
+        else:
+            ref_context = text
+
+        reference = answer_with_context(q, ref_context, cfg, answerer, language)
+        if scoped and not reference.found:
+            # Cross-section dependency -> fall back to the full original.
+            reference = answer_with_context(q, text, cfg, answerer, language)
         candidate = answer_with_context(q, summary, cfg, answerer, language)
         baseline = (
             answer_closed_book(q, cfg, answerer, language)

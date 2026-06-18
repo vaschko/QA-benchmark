@@ -17,19 +17,76 @@ NOT_KNOWN = "NOT_KNOWN"
 # --------------------------------------------------------------------------
 # Question generation (strong model)
 # --------------------------------------------------------------------------
-def question_gen(count: int, types: list[str], language: str) -> tuple[str, str]:
-    system = (
-        "You are an exam designer. From a given document you create questions "
-        "that can be answered exclusively from the content of that document. "
-        "Good questions are specific and target concrete facts, numbers, names, "
-        "dates, definitions or relationships in the document. Avoid questions "
-        "that anyone could answer from general knowledge without the document, "
-        "and questions whose answer is not in the document."
+def _exam_designer_system(focus: str, scope: str) -> str:
+    """Build the exam-designer system prompt.
+
+    `scope` is "document" or "section"; `focus` is "detailed" (concrete
+    facts/numbers/names) or "material" (the key content a faithful summary must
+    preserve, rather than incidental trivia).
+    """
+    if scope == "section":
+        intro = (
+            "You are an exam designer. From a given section of a larger document "
+            "you create questions that can be answered exclusively from the "
+            "content of that section. "
+        )
+    else:
+        intro = (
+            "You are an exam designer. From a given document you create questions "
+            "that can be answered exclusively from the content of that document. "
+        )
+
+    if focus == "material":
+        body = (
+            f"Good questions target the MATERIAL content that a faithful summary "
+            f"must preserve: the key obligations, rights, permissions, "
+            f"prohibitions, conditions, deadlines, liabilities, remedies and the "
+            f"main point of each provision in the {scope}. Prefer what changes "
+            f"the parties' rights or duties over incidental trivia such as exact "
+            f"email addresses, individual entity names or minor cross-references. "
+        )
+    else:
+        body = (
+            f"Good questions are specific and target concrete facts, numbers, "
+            f"names, dates, definitions or relationships in the {scope}. "
+        )
+
+    outro = (
+        f"Avoid questions that anyone could answer from general knowledge without "
+        f"the {scope}, and questions whose answer is not in the {scope}."
     )
+    return intro + body + outro
+
+
+def question_gen(
+    count: int, types: list[str], language: str, focus: str = "detailed"
+) -> tuple[str, str]:
+    system = _exam_designer_system(focus, "document")
     user = (
         f"Create exactly {count} questions about the following document. "
         f"Spread the questions across these types where possible: {', '.join(types)}. "
         "Cover different parts of the document. "
+        f"IMPORTANT: Language of the questions: {language}. Write ALL questions "
+        "exclusively in this language, regardless of the language of this instruction. "
+        "Return the result exclusively as JSON according to the schema."
+    )
+    return system, user
+
+
+def question_gen_section(
+    count: int, types: list[str], language: str, section_title: str, focus: str = "detailed"
+) -> tuple[str, str]:
+    """Question generation from a single SECTION of a larger document.
+
+    Same exam-designer rules as `question_gen`, but the model is told the text is
+    one section so it targets that section instead of a whole document.
+    """
+    system = _exam_designer_system(focus, "section")
+    user = (
+        f"Create exactly {count} question(s) about the following section "
+        f'("{section_title}") of a larger document. '
+        f"Spread the questions across these types where possible: {', '.join(types)}. "
+        "Every question must be answerable from THIS section's content alone. "
         f"IMPORTANT: Language of the questions: {language}. Write ALL questions "
         "exclusively in this language, regardless of the language of this instruction. "
         "Return the result exclusively as JSON according to the schema."

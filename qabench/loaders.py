@@ -26,13 +26,15 @@ def load_document(path: str | Path) -> str:
 
 
 def _load_pdf(path: Path) -> str:
+    # PyMuPDF (fitz) preserves character spacing far better than pypdf, which on
+    # some PDFs splits words with stray spaces ("W hy this inform ation").
     try:
-        from pypdf import PdfReader
+        import fitz  # PyMuPDF
     except ImportError as exc:  # pragma: no cover
-        raise ImportError("pypdf is missing -- please run `pip install -r requirements.txt`.") from exc
+        raise ImportError("PyMuPDF is missing -- please run `pip install -r requirements.txt`.") from exc
 
-    reader = PdfReader(str(path))
-    pages = [page.extract_text() or "" for page in reader.pages]
+    with fitz.open(str(path)) as doc:
+        pages = [page.get_text() for page in doc]
     return "\n\n".join(pages).strip()
 
 

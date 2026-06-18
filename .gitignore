@@ -12,7 +12,8 @@ env/
 # Benchmark output (generated at runtime)
 /runs/
 
-# Local third-party test document (not redistributed)
+# Local third-party test documents (not redistributed)
 /data/documents/BMW_test.pdf
+/data/documents/Revolut_Terms.pdf
 *.lock
 /node_modules

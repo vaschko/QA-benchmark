@@ -26,15 +26,15 @@ models:
     #   max_tokens: 2000
 
   summarizer:
-    #provider: ollama
-    #model: gemma4:e4b
-    #options:
-    #  temperature: 0.3
-    #  num_ctx: 32768
+    provider: ollama
+    model: qwen3.5:4b
+    options:
+      temperature: 0.3
+      num_ctx: 32768
     # --- Alternative: OpenAI-API (needs OPENAI_API_KEY) ---
-    provider: openai
-    model: gpt-5.5
-    api_key_env: OPENAI_API_KEY   # optional; this is the default for openai
+    #provider: openai
+    #model: gpt-5.5
+    #api_key_env: OPENAI_API_KEY   # optional; this is the default for openai
 
   answerer:
      provider: ollama
@@ -51,6 +51,12 @@ questions:
   count: 50
   # Controls the variety of the generated questions
   types: [factual, numeric, inferential]
+  # Was die Fragen abfragen:
+  #   detailed -> konkrete Fakten/Zahlen/Namen (feingranularer Recall)
+  #   material -> die Kerninhalte, die eine treue Summary behalten MUSS
+  #               (Pflichten, Rechte, Fristen, Haftung) statt Trivia
+  # Pro Lauf ueberschreibbar mit --focus; beide Sets werden separat gecacht.
+  focus: detailed
 
 summary:
   mode: generate        # generate | file
@@ -60,6 +66,11 @@ answering:
   closed_book_baseline: true   # jede Frage zusätzlich OHNE Kontext -> Kontaminationscheck
   require_evidence: true       # Modell muss ein Beleg-Zitat liefern
   max_context_chars: 90000     # längere Dokumente werden abgeschnitten (Warnung im Report)
+  # Referenz-Antwort (Ground Truth) gegen das Original:
+  #   full    -> ganzes Dokument (klassisch; kann lange Docs abschneiden)
+  #   section -> nur die eigene Section (+ Preamble) mit Volltext-Fallback,
+  #              spart Tokens und vermeidet Truncation (braucht sections.enabled)
+  context_scope: section
 
 judge:
   # Mögliche Urteile; das stärkere Modell ordnet jede Antwort genau einem zu.
@@ -67,3 +78,14 @@ judge:
 
 run:
   output_dir: runs
+
+# Robustes, deterministisches Aufteilen eines Dokuments in Sections.
+# Versucht mehrere Heading-Konventionen (markdown / numbered / keyword / roman /
+# allcaps) und faellt sonst auf Absatz-Chunking zurueck -- es geht nie etwas
+# verloren. Inspizieren mit:  python -m qabench sections -d <doc>
+sections:
+  enabled: true          # Fragen pro Section erzeugen + Pro-Section-Retention-Score
+  min_headings: 2        # so viele Headings muss eine Strategie finden, sonst naechste
+  max_chunk_chars: 6000  # Zielgroesse einer Section beim Absatz-Fallback
+  keep_preamble: true    # Text vor dem ersten Heading als "Preamble" behalten
+  per_section_min_chars: 200  # kuerzere Sections werden bei der Fragegenerierung uebersprungen
