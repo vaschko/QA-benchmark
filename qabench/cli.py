@@ -166,6 +166,7 @@ def sections(
         min_headings=cfg.sections.min_headings,
         max_chunk_chars=cfg.sections.max_chunk_chars,
         keep_preamble=cfg.sections.keep_preamble,
+        max_depth=cfg.sections.max_depth,
     )
     method = secs[0].method if secs else "-"
     console.print(

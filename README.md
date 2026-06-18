@@ -144,10 +144,17 @@ python -m qabench sections -d data/documents/Revolut_Terms.pdf
 python -m qabench sections -d doc.md --show-content
 ```
 
+Numbered headings may sit on their own line (`1.` with the title on the next
+line, as many PDFs export) — these are detected too. `sections.max_depth` caps
+how deep numbered/markdown headings split: `1` keeps only the top level
+(`1.`, `2.`, …, not `1.1`), `2` adds one sublevel, `0` is unlimited. This stops
+deeply numbered contracts from exploding into hundreds of micro-sections.
+
 The clean original-vs-summary comparison and the contamination check are
 preserved: the candidate is always answered against the summary, the baseline
 without any context. Settings live under `sections:` in the config
-(`min_headings`, `max_chunk_chars`, `keep_preamble`, `per_section_min_chars`).
+(`min_headings`, `max_chunk_chars`, `keep_preamble`, `per_section_min_chars`,
+`max_depth`).
 
 ### Section-scoped reference answering (`answering.context_scope`)
 

@@ -89,3 +89,4 @@ sections:
   max_chunk_chars: 6000  # Zielgroesse einer Section beim Absatz-Fallback
   keep_preamble: true    # Text vor dem ersten Heading als "Preamble" behalten
   per_section_min_chars: 200  # kuerzere Sections werden bei der Fragegenerierung uebersprungen
+  max_depth: 1           # nur oberste Nummerierungsebene splitten (1=top-level, 2=+Subsections, 0=alle)

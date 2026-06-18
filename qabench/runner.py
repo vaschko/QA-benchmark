@@ -35,7 +35,7 @@ def _questions_cache_path(text: str, doc_path: Path, cfg: Config, language: str)
     # sectioning settings are part of the cache key.
     sec_key = (
         f"|sec={int(sec.enabled)},{sec.min_headings},{sec.max_chunk_chars},"
-        f"{int(sec.keep_preamble)},{sec.per_section_min_chars}"
+        f"{int(sec.keep_preamble)},{sec.per_section_min_chars},d{sec.max_depth}"
     )
     # Append focus only when non-default, so existing "detailed" caches stay valid
     # while "material" gets its own distinct question set.
@@ -66,6 +66,7 @@ def load_or_generate_questions(
             min_headings=cfg.sections.min_headings,
             max_chunk_chars=cfg.sections.max_chunk_chars,
             keep_preamble=cfg.sections.keep_preamble,
+            max_depth=cfg.sections.max_depth,
         )
         questions = generate_questions_by_section(sections, cfg, provider, language)
     else:
@@ -175,6 +176,7 @@ def run_benchmark(
             min_headings=cfg.sections.min_headings,
             max_chunk_chars=cfg.sections.max_chunk_chars,
             keep_preamble=cfg.sections.keep_preamble,
+            max_depth=cfg.sections.max_depth,
         )
         by_index = {s.index: s.content for s in secs}
         preamble = next((s for s in secs if s.title == "Preamble"), None)

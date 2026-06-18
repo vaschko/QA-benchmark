@@ -48,9 +48,11 @@ _MD_HEADING = re.compile(r"^[ \t]*#{1,6}[ \t]+\S.*$", re.MULTILINE)
 
 # A single integer must carry a separator (``1.`` / ``2)`` / ``3|``); a bare
 # integer would also match prose like "2024 was ..." . Multi-level numbers
-# (``1.1`` / ``1.2.3``) are accepted without a trailing separator.
+# (``1.1`` / ``1.2.3``) are accepted without a trailing separator. The title may
+# follow on the same line OR be empty -- many PDFs put the number on its own line
+# (``1.``) with the heading text on the next line.
 _NUM_HEADING = re.compile(
-    r"^[ \t]*(?:\d+\.\d+(?:\.\d+)*|\d+[.)|])[ \t]+\S.*$", re.MULTILINE
+    r"^[ \t]*(?:\d+\.\d+(?:\.\d+)*|\d+[.)|])[ \t]*(?:\S.*)?$", re.MULTILINE
 )
 
 _KEYWORD_HEADING = re.compile(
@@ -59,7 +61,7 @@ _KEYWORD_HEADING = re.compile(
     re.MULTILINE,
 )
 
-_ROMAN_HEADING = re.compile(r"^[ \t]*[IVXLCDM]{1,7}[.)][ \t]+\S.*$", re.MULTILINE)
+_ROMAN_HEADING = re.compile(r"^[ \t]*[IVXLCDM]{1,7}[.)][ \t]*(?:\S.*)?$", re.MULTILINE)
 
 # Whole line is upper-case letters/digits/light punctuation (>= 4 chars), no
 # trailing sentence period. Heuristic, hence lowest priority.
@@ -105,11 +107,21 @@ def _sectionize(text, matches, method, level_fn, keep_preamble) -> list[Section]
         block = text[m.start() : end].strip()
         if not block:
             continue
-        heading_line = block.splitlines()[0].strip()
+        block_lines = block.splitlines()
+        heading_line = block_lines[0].strip()
+        title = _clean_title(heading_line, strip_md=(method == "markdown"))
+        # A bare numeric marker ("1." / "1.1") often sits on its own line with the
+        # real heading text on the next line -- pull it in for a meaningful title.
+        if re.fullmatch(r"\d+(?:\.\d+)*[.)|]?", title):
+            for nxt in block_lines[1:]:
+                nxt = nxt.strip()
+                if nxt:
+                    title = f"{title} {nxt}"
+                    break
         out.append(
             Section(
                 index=idx,
-                title=_clean_title(heading_line, strip_md=(method == "markdown")),
+                title=title,
                 content=block,
                 level=level_fn(heading_line),
                 method=method,
@@ -156,18 +168,36 @@ def _split_paragraphs(text: str, max_chunk_chars: int) -> list[Section]:
     ]
 
 
+def _filter_by_depth(matches, level_fn, max_depth: int):
+    """Keep only headings down to ``max_depth`` levels below the shallowest one.
+
+    ``max_depth`` is relative to the shallowest heading actually present, so a
+    document whose top level is ``1.1`` still splits. ``max_depth <= 0`` means no
+    limit. Deeper headings are dropped as split points, so their text stays inside
+    the parent section.
+    """
+    if max_depth <= 0 or len(matches) <= 1:
+        return matches
+    levels = [level_fn(m.group(0)) for m in matches]
+    threshold = min(levels) + max_depth - 1
+    kept = [m for m, lv in zip(matches, levels) if lv <= threshold]
+    return kept or matches
+
+
 def split_into_sections(
     text: str,
     *,
     min_headings: int = 2,
     max_chunk_chars: int = 6000,
     keep_preamble: bool = True,
+    max_depth: int = 0,
 ) -> list[Section]:
     """Split ``text`` into sections, robust across heading conventions.
 
     Tries each heading strategy in priority order; the first that finds at least
     ``min_headings`` headings wins. If none does, falls back to paragraph
-    chunking so nothing is ever lost.
+    chunking so nothing is ever lost. ``max_depth`` caps how deep numbered/markdown
+    headings split (1 = top level only; 0 = unlimited).
     """
     text = text.replace("\r\n", "\n").replace("\r", "\n")
 
@@ -182,6 +212,7 @@ def split_into_sections(
     for regex, method, level_fn in strategies:
         matches = list(regex.finditer(text))
         if len(matches) >= min_headings:
+            matches = _filter_by_depth(matches, level_fn, max_depth)
             return _sectionize(text, matches, method, level_fn, keep_preamble)
 
     return _split_paragraphs(text, max_chunk_chars)

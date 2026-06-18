@@ -79,6 +79,11 @@ class SectionsConfig(BaseModel):
     max_chunk_chars: int = 6000
     # Keep the text before the first heading as a "Preamble" section.
     keep_preamble: bool = True
+    # How deep numbered/markdown headings are split, relative to the shallowest
+    # one present: 1 = top level only (e.g. "1.", "2." but not "1.1"); 2 = one
+    # sublevel too; 0 = unlimited. Avoids exploding deeply numbered docs into
+    # hundreds of micro-sections.
+    max_depth: int = 1
     # Sections shorter than this are too small to yield good questions and are
     # skipped during question generation (they are still part of the document
     # that answers are read from).

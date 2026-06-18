@@ -12,8 +12,8 @@ env/
 # Benchmark output (generated at runtime)
 /runs/
 
-# Local third-party test documents (not redistributed)
-/data/documents/BMW_test.pdf
-/data/documents/Revolut_Terms.pdf
+# Local third-party test documents, not redistributed (e.g. BMW, Revolut,
+# Klarna, Paypal T&C PDFs). Tracked sample docs (.md) are unaffected.
+/data/documents/*.pdf
 *.lock
 /node_modules
